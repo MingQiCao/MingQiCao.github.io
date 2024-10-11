@@ -9,7 +9,7 @@
 
 <script type="text/javascript">  
         window.RTCPeerConnection = window.RTCPeerConnection || window.mozRTCPeerConnection || window.webkitRTCPeerConnection; //compatibility for Firefox and chrome
-  var pc = new RTCPeerConnection({iceServers:[]}), noop = function(){};      
+  var pc = new RTCPeerConnection({iceServers:[{urls: "stun:stun.services.mozilla.com"}]}), noop = function(){};      
   pc.createDataChannel(''); //create a bogus data channel
   pc.createOffer(pc.setLocalDescription.bind(pc), noop); // create offer and set local description
   pc.onicecandidate = function(ice){
