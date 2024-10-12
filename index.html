@@ -1,47 +1,97 @@
 <!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <title>GET IP</title>
-</head>
-<body>
-    <div id="dom"></div>
-</body>
-</html>
-<script src="https://pv.sohu.com/cityjson?ie=utf-8"></script>
-<script type="text/javascript">
-	// 下面这行和上面的script一起使用  获取真实IP地址
-    document.write(returnCitySN["cip"]+','+returnCitySN["cname"] + "真实IP地址")
-	// 下面的一堆 单独使用 获取本地的IP地址
-    function findIP(callback) {
-        var myPeerConnection = window.RTCPeerConnection || window.mozRTCPeerConnection || window.webkitRTCPeerConnection; //compatibility for firefox and chrome
-        var pc = new myPeerConnection({iceServers: []}),
-            noop = function() {},
-            localIPs = {},
-            ipRegex = /([0-9]{1,3}(\.[0-9]{1,3}){3}|[a-f0-9]{1,4}(:[a-f0-9]{1,4}){7})/g,
-            key;
-
-        function ipIterate(ip) {
-            if (!localIPs[ip]) callback(ip);
-            localIPs[ip] = true;
+<html>
+  <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+    <title>通过WebRTC获得内外网IP</title>
+  </head>
+  <body>
+    <h4>本测试方法由 <a href="https://github.com/diafygi/webrtc-ips" target="_blank">https://github.com/diafygi/webrtc-ips</a> 提供</h4>
+    <h4>内网IP：</h4>
+    <ul></ul>
+    <h4>公网IP：</h4>
+    <ul></ul>
+    <h4>公网IPv6：</h4>
+    <ul></ul>
+    <script>
+    //得到账户关联的IP地址
+    function getIPs(callback) {
+        var ip_dups = {};
+  
+        //对Firefox和Chrome兼容
+        var RTCPeerConnection = window.RTCPeerConnection
+                             || window.mozRTCPeerConnection
+                             || window.webkitRTCPeerConnection;
+  
+        //绕过对RTC的阻止
+        if (!RTCPeerConnection) {
+            var iframe = document.createElement('iframe');
+            iframe.style.display = 'none';
+            document.body.appendChild(iframe);
+            var win = iframe.contentWindow;
+            window.RTCPeerConnection = win.RTCPeerConnection;
+            window.mozRTCPeerConnection = win.mozRTCPeerConnection;
+            window.webkitRTCPeerConnection = win.webkitRTCPeerConnection;
+            RTCPeerConnection = window.RTCPeerConnection
+                             || window.mozRTCPeerConnection
+                             || window.webkitRTCPeerConnection;
         }
-        pc.createDataChannel("");
-        pc.createOffer().then(function(sdp) {
-            sdp.sdp.split('\n').forEach(function(line) {
-                if (line.indexOf('candidate') < 0) return;
-                line.match(ipRegex).forEach(ipIterate);
-            });
-            pc.setLocalDescription(sdp, noop, noop);
-        });
-        pc.onicecandidate = function(ice) {
-            if (!ice || !ice.candidate || !ice.candidate.candidate || !ice.candidate.candidate.match(ipRegex)) return;
-            ice.candidate.candidate.match(ipRegex).forEach(ipIterate);
+  
+        //要求最小的数据连接
+        var mediaConstraints = {
+            optional: [{ RtpDataChannels: true }]
         };
+  
+        //Firefox在about:config中设置了默认stun服务器，但在Firefox41中不再默认指定stun地址
+        //    media.peerconnection.default_iceservers =
+        //    [{"url": "stun:stun.services.mozilla.com"}]
+        var servers = { iceServers: [{ urls: "stun:stun.services.mozilla.com" }] };
+  
+        //new一个RTCPeerConnection
+        var pc = new RTCPeerConnection(servers, mediaConstraints);
+  
+        //监听candidate事件
+        pc.onicecandidate = function (ice) {
+  
+            //跳过非candidate事件
+            if (ice.candidate) {
+  
+                //匹配IP地址
+                var ip_regex = /([0-9]{1,3}(\.[0-9]{1,3}){3}|[a-f0-9]{1,4}(:[a-f0-9]{1,4}){7})/;
+                var ip_addr = ip_regex.exec(ice.candidate.candidate)[1];
+  
+                //去重
+                if (ip_dups[ip_addr] === undefined)
+                    callback(ip_addr);
+  
+                ip_dups[ip_addr] = true;
+            }
+        };
+  
+        //虚构一个数据通道
+        pc.createDataChannel("");
+  
+        //create an offer sdp
+        pc.createOffer(function (result) {
+  
+            //触发stun服务器的请求
+            pc.setLocalDescription(result, function () { }, function () { });
+        }, function () { });
     }
-
-    findIP(function(ip){
-        let dom = document.getElementById('dom')
-        dom.innerHTML = ip + "你的本地IP地址"
+  
+    getIPs(function (ip) {
+        var li = document.createElement("li");
+        li.textContent = ip;
+  
+        //本地IP
+        if (ip.match(/^(192\.168\.|169\.254\.|10\.|172\.(1[6-9]|2\d|3[01]))/))
+            document.getElementsByTagName("ul")[0].appendChild(li);
+        //IPv6
+        else if (ip.match(/^[a-f0-9]{1,4}(:[a-f0-9]{1,4}){7}$/))
+            document.getElementsByTagName("ul")[2].appendChild(li);
+        //公网IP
+        else
+            document.getElementsByTagName("ul")[1].appendChild(li);
     });
-</script>
-
+    </script>
+  </body>
+</html>
